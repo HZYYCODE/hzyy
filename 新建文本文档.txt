@@ -1,0 +1,458 @@
+   public static ResultData doctor_prescription_Branch(List<DoctorPrescription> pds, RelationalDatabase BDatabase, ref List<result_DoctorPrescription> RDPS)
+        {
+            DateTime dateBegin = DateTime.Now;
+            writelog_DATE("处方分方", "开始进行处方分方");
+            ResultData rd = new ResultData();
+            try
+            {
+                writelog("处方分方", "开始进入处方分方");
+                writelog("接收参数打印", "总参数打印：" + listttojson(pds));
+                #region 这里定义返回的数据列表集合
+                // 返回的处方单列表
+                List<Recipe> _Recipe_list_result = new List<Recipe>();
+                // 返回的处方明细列表
+                List<RecipeDetail> RecipeDetail_result = new List<RecipeDetail>();
+                //返回的煎药方案 列表
+                List<OutSurcharge> OutSurcharge_list_result = new List<OutSurcharge>();
+                // 返回的中药的附加费列表
+                List<OutSurchargeProgramme> OutSurchargeProgramme_list_result = new List<OutSurchargeProgramme>();
+
+                // 处方单列表
+                List<Recipe> _Recipe_list = new List<Recipe>();
+                // 明细列表
+                List<RecipeDetail> RecipeDetail = new List<RecipeDetail>();
+                //煎药方案 列表
+                List<OutSurcharge> OutSurcharge_list = new List<OutSurcharge>();
+                // 中药的附加费列表
+                List<OutSurchargeProgramme> OutSurchargeProgramme_list = new List<OutSurchargeProgramme>();
+                //返回的处方单列表
+                result_DoctorPrescription result_DoctorPrescription_list = new result_DoctorPrescription();
+                #endregion
+                #region 这里对传入的数据集进行拆分
+                writelog("处方分方", "对传入的数据集进行拆分");
+                Recipe recipe_all = new Recipe();
+                //prescriptionList 是一个处方单 prescriptionDetailList是单个处方明细 
+                //遍历传进来的所有处方单 这里需要把处方单打散 变成一个个的单个处方 
+                //对每一条处方都打上处方分方标识 然后在后面在进行重新组装处方
+                foreach (DoctorPrescription dp in pds)
+                {
+                    writelog("接收参数打印", "明细参数打印：" + listttojson(dp.prescriptionDetailList));
+                    Recipe recipe = new Recipe();
+                    // presType 处方类型	1-药品处方 2-检查治疗处方
+                    //检查治疗处方 
+                    //这里是每个明细
+                    foreach (PrescriptionDetail item in dp.prescriptionDetailList)
+                    {
+                        //单个明细
+                        //orderType	String(1)	√	医嘱类型	1：西药 2：中成 3：草药 4：治疗 5检查6：检验
+                        RecipeDetail recipeDetail = new RecipeDetail();
+                        recipeDetail = PrescriptionDetailToRecipeDetail(item);
+                        if (dp.decoctingType == "1" || dp.decoctingType == "2")
+                        {
+                            recipeDetail.SFJY = "1";
+                        }
+                        //将所有处方明细添加到明细列表中
+                        RecipeDetail.Add(recipeDetail);
+                    }
+                    recipe = DoctorPrescriptionToRecipe(dp);
+                    recipe.prescriptionDetailList = RecipeDetail;
+                    recipe_all = recipe;
+                    _Recipe_list.Add(recipe);
+                }
+                writelog("处方分方", "将处方明细和处方分别加入到集合内");
+                List<RecipeDetail> RecipeDetail_YP = new List<RecipeDetail>();
+                List<RecipeDetail> RecipeDetail_ZL = new List<RecipeDetail>();
+                List<RecipeDetail> RecipeDetail_JYJC = new List<RecipeDetail>();
+                //这里遍历处方明细列表进行处方划分为两个集合药品处方集合和治疗处方集合
+                foreach (RecipeDetail item in RecipeDetail)
+                {
+                    switch (item.orderType)
+                    {
+                        //为药品处方时的处理
+                        case "1":
+                        case "2":
+                        case "3":
+                            RecipeDetail_YP.Add(item);
+                            break;
+                        case "4":
+                            RecipeDetail_ZL.Add(item);
+                            break;
+                        //为检验的时候的处理
+                        case "5":
+                        case "6":
+                            RecipeDetail_JYJC.Add(item);
+                            break;
+                    }
+                }
+                writelog("处方分方", "划分药品处方和治疗处方");
+                //list集合转化为table
+                string[] dt_LM ={"id","businessPreOrderId","prescriptionId","groupId","sortNo","orderType","orderId","orderName","specId",
+                    "specName","manufacturer","execDeptId","execDeptName","price","dosage","dosageUnitid","dosageUnitName","dosageUnitType",
+                    "bagNum","frequencyId","frequencyName","usageId","usageName","days","usagePrescId","amount","amountPrice",
+                    "amountUnitId","amountUnitName","money","complexFlag","checkpoints","checkpointsCode","basSampleId",
+                    "basSampleName","costrelatedFlag","footnoteId","footnoteName","exhortation","SFJY"};
+                //DataTable tbb = ToDataTable(RecipeDetail, dt_LM);
+                writelog("处方分方", "开始添加数据到药品中");
+                DataTable tb_YP = new DataTable();
+                //tb_YP.Columns["price"].DataType = Type.GetType("System.Decimal");
+                tb_YP = ToDataTable(RecipeDetail_YP);
+                writelog("处方分方", "添加数据到药品中完成，表内行数为：" + tb_YP.Rows.Count);
+                writelog("处方分方", "开始添加数据到治疗表内");
+                DataTable tb_ZL = ToDataTable(RecipeDetail_ZL);
+                writelog("处方分方", "添加数据到治疗处方中完成，表内行数为：" + tb_ZL.Rows.Count);
+                DataTable tb_jyjc = ToDataTable(RecipeDetail_JYJC);
+                writelog("处方分方", "添加数据到检验检查处方中完成，表内行数为：" + tb_jyjc.Rows.Count);
+                writelog("处方分方", "药品：" + DataTableToJsonWithJsonNet(tb_YP));
+                writelog("处方分方", "治疗：" + DataTableToJsonWithJsonNet(tb_ZL));
+                writelog("处方分方", "检验检查：" + DataTableToJsonWithJsonNet(tb_jyjc));
+                #endregion
+                #region 检验检查处方按照执行科室和orderid分组
+
+                writelog("处方分方", "开始分方检验检查处方");
+                //治疗处方全部按照执行科室分组
+                string[] GroupbyField = { "execDeptId", "orderId", "businessPreOrderId" };// orderType
+                string[] ComputeField = { "money" };
+                string[] CField = { "sum" };
+                TrasenFrame.Classes.TsSet xcset = new TrasenFrame.Classes.TsSet();
+                xcset.TsDataTable = tb_jyjc;
+                //这里计算出来的是分组
+                DataTable tb_jyjccf = xcset.GroupTable(GroupbyField, ComputeField, CField, "");
+                writelog("处方分方", "检验检查处方分组后：" + DataTableToJsonWithJsonNet(tb_jyjccf));
+                writelog("处方分方", "检验检查处方分组完成");
+                //遍历处方进行赋值 这个rows.count就是最后返回的处方单张数
+                for (int i = 0; i < tb_jyjccf.Rows.Count; i++)
+                {
+                    writelog("处方分方", "开始添加治疗处方头数据到返回数据集内 当前：第" + i + "次" + "::" + recipe_all.execDeptName);
+                    //定义新的处方关联id
+                    Guid guid = new Guid();
+                    guid = Guid.NewGuid();
+                    //为处方单头赋值
+                    Recipe recipe = new Recipe
+                    {
+                        regId = recipe_all.regId,
+                        outpatientNo = recipe_all.outpatientNo,
+                        id = recipe_all.id,
+                        businessPreId = recipe_all.businessPreId,
+                        presType = "2",
+                        isCipherPresc = recipe_all.isCipherPresc,
+                        patientId = recipe_all.patientId,
+                        patientName = recipe_all.patientName,
+                        sex = recipe_all.sex,
+                        age = recipe_all.age,
+                        mobile = recipe_all.mobile,
+                        cardNo = recipe_all.cardNo,
+                        deptId = recipe_all.deptId,
+                        deptName = recipe_all.deptName,
+                        doctId = recipe_all.doctId,
+                        doctName = recipe_all.doctName,
+                        money = decimal.Parse(tb_jyjccf.Rows[i]["money"].ToString()),
+                        decoctingType = "0",
+                        source = recipe_all.source,
+                        relateId = guid.ToString(),
+                        //execDeptName = recipe_all.execDeptName,
+                        //execDeptId = recipe_all.execDeptId,
+                    };
+                    recipe.prescriptionDetailList = new List<RecipeDetail>();
+                    //如果处方明细的执行科室id和当前遍历的处方单的执行科室一致 就绑定上去
+                    foreach (RecipeDetail item in RecipeDetail)
+                    {
+                        if (item.execDeptId == tb_jyjccf.Rows[i]["execDeptId"].ToString() && item.orderId == tb_jyjccf.Rows[i]["orderId"].ToString())
+                        {
+                            writelog("处方分方", "execDeptId:" + tb_jyjccf.Rows[i]["execDeptId"].ToString());
+                            item.execDeptId = tb_jyjccf.Rows[i]["execDeptId"].ToString();
+                            item.relateId = guid.ToString();
+                            recipe.execDeptName = item.execDeptName;
+                            recipe.execDeptId = item.execDeptId;
+                            writelog("处方分方", "ITEM:" + item);
+                            recipe.prescriptionDetailList = new List<RecipeDetail>();
+                            recipe.prescriptionDetailList.Add(item);
+                            writelog("处方分方", "1111");
+                        }
+                    }
+                    //将处方单添加到处方单集内
+                    _Recipe_list_result.Add(recipe);
+                    //将处方单添加到返回数据集内
+                    result_DoctorPrescription_list.Recipe = _Recipe_list_result;
+                    writelog("处方分方", "完成添加治疗数据到处方头内 当前：第" + i + "次");
+                }
+                #endregion
+                #region 治疗处方按照执行科室分组
+
+                writelog("处方分方", "开始分方检验检查处方");
+                //治疗处方全部按照执行科室分组
+                string[] GroupbyField_zl = { "execDeptId", "orderType", "orderid", "businessPreOrderId" };// orderType
+                string[] ComputeField_zl = { "money" };
+                string[] CField_zl = { "sum" };
+                TrasenFrame.Classes.TsSet xcset_zl = new TrasenFrame.Classes.TsSet();
+                xcset.TsDataTable = tb_ZL;
+                //这里计算出来的是分组
+                DataTable tb_ZLCF = xcset.GroupTable(GroupbyField_zl, ComputeField_zl, CField_zl, "");
+                writelog("处方分方", "治疗处方处方分组后：" + DataTableToJsonWithJsonNet(tb_ZLCF));
+                writelog("处方分方", "治疗处方处方分组完成");
+                //遍历处方进行赋值 这个rows.count就是最后返回的处方单张数
+                for (int i = 0; i < tb_ZLCF.Rows.Count; i++)
+                {
+                    writelog("处方分方", "开始添加治疗处方头数据到返回数据集内 当前：第" + i + "次" + "::" + recipe_all.execDeptName);
+                    //定义新的处方关联id
+                    Guid guid = new Guid();
+                    guid = Guid.NewGuid();
+                    //为处方单头赋值
+                    Recipe recipe = new Recipe
+                    {
+                        regId = recipe_all.regId,
+                        outpatientNo = recipe_all.outpatientNo,
+                        id = recipe_all.id,
+                        businessPreId = recipe_all.businessPreId,
+                        presType = "2",
+                        isCipherPresc = recipe_all.isCipherPresc,
+                        patientId = recipe_all.patientId,
+                        patientName = recipe_all.patientName,
+                        sex = recipe_all.sex,
+                        age = recipe_all.age,
+                        mobile = recipe_all.mobile,
+                        cardNo = recipe_all.cardNo,
+                        deptId = recipe_all.deptId,
+                        deptName = recipe_all.deptName,
+                        doctId = recipe_all.doctId,
+                        doctName = recipe_all.doctName,
+                        money = decimal.Parse(tb_ZLCF.Rows[i]["money"].ToString()),
+                        decoctingType = "0",
+                        source = recipe_all.source,
+                        relateId = guid.ToString(),
+                        //execDeptName = recipe_all.execDeptName,
+                        //execDeptId = recipe_all.execDeptId,
+                    };
+                    recipe.prescriptionDetailList = new List<RecipeDetail>();
+                    //如果处方明细的执行科室id和当前遍历的处方单的执行科室一致 就绑定上去
+                    foreach (RecipeDetail item in RecipeDetail)
+                    {
+                        writelog("处方分方", i + ":execDeptId:" + tb_ZLCF.Rows[i]["execDeptId"].ToString());
+                        writelog("处方分方", i + ":orderId:" + tb_ZLCF.Rows[i]["orderId"].ToString());
+                        if (item.execDeptId == tb_ZLCF.Rows[i]["execDeptId"].ToString() && item.orderId == tb_ZLCF.Rows[i]["orderId"].ToString() && item.businessPreOrderId == tb_ZLCF.Rows[i]["businessPreOrderId"].ToString())
+                        {
+                            writelog("处方分方", "execDeptId:" + tb_ZLCF.Rows[i]["execDeptId"].ToString());
+                            item.execDeptId = tb_ZLCF.Rows[i]["execDeptId"].ToString();
+                            item.relateId = guid.ToString();
+                            recipe.execDeptName = item.execDeptName;
+                            recipe.execDeptId = item.execDeptId;
+                            writelog("处方分方", "ITEM:" + item);
+                            recipe.prescriptionDetailList = new List<RecipeDetail>();
+                            recipe.prescriptionDetailList.Add(item);
+                            writelog("处方分方", "1111");
+                        }
+                    }
+                    //将处方单添加到处方单集内
+                    _Recipe_list_result.Add(recipe);
+                    //将处方单添加到返回数据集内
+                    result_DoctorPrescription_list.Recipe = _Recipe_list_result;
+                    writelog("处方分方", "完成添加治疗数据到处方头内 当前：第" + i + "次");
+                }
+                #endregion
+                #region 药品处方按照药品类型分组
+                //药品处方全部按照执行科室分组
+                if (tb_YP.Rows.Count != 0)
+                {
+                    writelog("处方分方", "字段类型：" + tb_YP.Columns["price"].DataType.ToString());
+                    writelog("处方分方", "开始按照药品进行分组");
+                    string[] GroupbyField_YP = { "orderType", "execDeptId", "businessPreOrderId" };//, "SFJY"
+                    string[] ComputeField_YP = { "money" };
+                    string[] CField_YP = { "sum" };
+                    TrasenFrame.Classes.TsSet xcset_YP = new TrasenFrame.Classes.TsSet();
+                    xcset_YP.TsDataTable = tb_YP;
+                    //这里计算出来的是分组
+                    DataTable tb_YPCF = xcset_YP.GroupTable(GroupbyField_YP, ComputeField_YP, CField_YP, "");
+                    writelog("处方分方", "按照药品进行分组完成");
+                    //遍历处方进行赋值 这个rows.count就是最后返回的处方单张数
+                    Guid guid_JY = new Guid();
+                    writelog("处方分方", "tb_YPCF.Rows.Count" + tb_YPCF.Rows.Count);
+                    writelog("处方分方", "药品分组之后：" + DataTableToJsonWithJsonNet(tb_YPCF));
+
+                    for (int i = 0; i < tb_YPCF.Rows.Count; i++)
+                    {
+                        writelog("处方分方", "开始添加药品处方头数据到返回数据集内 当前：第" + i + "次");
+                        //定义新的处方关联id
+                        Guid guid = new Guid();
+                        guid = Guid.NewGuid();
+                        List<Recipe> recipes = new List<Recipe>();
+                        recipes.Add(recipe_all);
+                        writelog("处方分方", listttojson(recipes));
+                        //为处方单头赋值
+                        Recipe recipe = new Recipe
+                        {
+                            regId = recipe_all.regId,
+                            outpatientNo = recipe_all.outpatientNo,
+                            id = recipe_all.id,
+                            businessPreId = recipe_all.businessPreId,
+                            presType = "1",
+                            isCipherPresc = recipe_all.isCipherPresc,
+                            patientId = recipe_all.patientId,
+                            patientName = recipe_all.patientName,
+                            sex = recipe_all.sex,
+                            age = recipe_all.age,
+                            mobile = recipe_all.mobile,
+                            cardNo = recipe_all.cardNo,
+                            deptId = recipe_all.deptId,
+                            deptName = recipe_all.deptName,
+                            doctId = recipe_all.doctId,
+                            doctName = recipe_all.doctName,
+                            money = decimal.Parse(tb_YPCF.Rows[i]["money"].ToString()),
+                            //decoctingType = recipe_all.decoctingType,
+                            source = recipe_all.source,
+                            relateId = guid.ToString(),
+                            //execDeptName = recipe_all.execDeptName,
+                            //execDeptId=recipe_all.execDeptId,
+                        };
+                        recipe.prescriptionDetailList = new List<RecipeDetail>();
+                        if (tb_YPCF.Rows[i]["orderType"].ToString() == "1") //&& tb_YPCF.Rows[i]["SFJY"].ToString() == "1"
+                        {
+                            recipe.decoctingType = "1";
+                            guid_JY = guid;
+                        }
+                        else
+                        {
+                            recipe.decoctingType = "0";
+                        }
+                        //如果处方明细的orderType和当前遍历的处方单的orderType一致 就绑定上去
+                        foreach (RecipeDetail item in RecipeDetail_YP)
+                        {
+                            if (item.orderType == tb_YPCF.Rows[i]["orderType"].ToString() && item.execDeptId == tb_YPCF.Rows[i]["execDeptId"].ToString() && item.businessPreOrderId == tb_YPCF.Rows[i]["businessPreOrderId"].ToString())
+                            {
+                                writelog("处方分方", "返回的处方明细" + listttojson(RecipeDetail_YP));
+                                item.execDeptId = tb_YPCF.Rows[i]["execDeptId"].ToString();
+                                item.relateId = guid.ToString();
+                                recipe.execDeptName = item.execDeptName;
+                                recipe.execDeptId = item.execDeptId;
+                                //
+                                recipe.prescriptionDetailList.Add(item);
+                            }
+                        }
+                        //将处方单添加到处方单集内
+                        _Recipe_list_result.Add(recipe);
+                        //将处方单添加到返回数据集内
+                        result_DoctorPrescription_list.Recipe = _Recipe_list_result;
+                        writelog("处方分方", "开始添加药品处方头数据到返回数据集内 当前：第" + i + "次");
+                    }
+
+                    #endregion
+                    #region 生成煎药的处方单
+                    writelog("处方分方", "开始生成煎药处方单");
+                    writelog("处方分方", "开始查询煎药方案");
+                    //7014 煎药费代码允许设置多个中药关联费用,用","分隔
+                    string where = "";
+                    object obj7014 = BDatabase.GetDataResult("select config from jc_config(nolock) where id=7014");
+                    if (obj7014 != null && !string.IsNullOrEmpty(obj7014.ToString()))
+                        where = " and a.order_id in(" + obj7014.ToString() + ")";
+                    //查询默认煎药项目及执行科室
+                    string sql = @"SELECT c.name as execDeptName,a.*,b.* FROM JC_HOITEMDICTION a(nolock) INNER JOIN JC_HOITEMPRICE b(nolock) ON a.ORDER_ID=b.HOITEMID
+                                    LEFT JOIN JC_DEPT_PROPERTY c(nolock) on a.default_dept=c.dept_id WHERE a.ORDER_NAME LIKE '%煎药%' and (canuser='门诊' or canuser is null or canuser ='')" + where;
+                    //定义table存储所有的项目
+                    DataTable dt_item = new DataTable();
+                    dt_item = BDatabase.GetDataTable(sql);
+                    if (dt_item.Rows.Count > 0)
+                    {
+                        writelog("处方分方", "查询煎药数据完成");
+                        writelog("item.decoctingType", "1111111");
+                        foreach (var item in _Recipe_list)
+                        {
+                            writelog("item.decoctingType", item.decoctingType);
+                            if (item.decoctingType == "1" || item.decoctingType == "2")
+                            {
+                                writelog("处方分方", "_Recipe_list：" + listttojson(_Recipe_list));
+                                writelog("处方分方", "prescriptionDetailList：" + listttojson(item.prescriptionDetailList));
+                                writelog("处方分方", "生成煎药数据返回");
+                                if (item.prescriptionDetailList != null && item.prescriptionDetailList.Count > 0)
+                                {
+                                    RecipeDetail item_mx = item.prescriptionDetailList[0];
+                                    DataRow[] dtr_XMMX = dt_item.Select(); //"order_id = '" + item_mx.orderId + " '"
+                                    if (dtr_XMMX != null && dtr_XMMX.Length > 0)
+                                    {
+                                        //DataTable dataTable = new DataTable();
+                                        //dataTable.Rows.Add(dtr_XMMX);
+                                        //writelog("处方分方", "dtr_XMMX:" + DataTableToJsonWithJsonNet(dataTable));
+                                        OutSurcharge outSurcharge = new OutSurcharge();
+                                        outSurcharge.orderId = dtr_XMMX[0]["order_id"].ToString();
+                                        outSurcharge.orderName = dtr_XMMX[0]["order_Name"].ToString();
+                                        outSurcharge.orderType = dtr_XMMX[0]["order_Type"].ToString();
+                                        outSurcharge.price = decimal.Parse(dtr_XMMX[0]["price"].ToString());
+                                        outSurcharge.unit = dtr_XMMX[0]["order_unit"].ToString();
+                                        outSurcharge.num = item_mx.bagNum; //根据剂数判断检验费次数
+                                        //outSurcharge.execDeptId = item.execDeptId;
+                                        // outSurcharge.execDeptName = item.execDeptName;
+                                        outSurcharge.execDeptId = dtr_XMMX[0]["default_dept"].ToString();
+                                        outSurcharge.execDeptName = dtr_XMMX[0]["execDeptName"].ToString();
+                                        outSurcharge.relateId = guid_JY.ToString();
+                                        outSurcharge.money = outSurcharge.price * outSurcharge.num;
+                                        outSurcharge.complexFlag = "0";
+                                        outSurcharge.additionalType = "3";
+                                        OutSurcharge_list_result.Add(outSurcharge);
+                                        writelog("处方分方", "煎药数据集合：" + listttojson(OutSurcharge_list_result));
+                                    }
+                                }
+                                writelog("处方分方", "生成煎药数据返回完成");
+                                result_DoctorPrescription_list.OutSurcharge = OutSurcharge_list_result;
+                            }
+                            //if (item.decoctingType == "1" || item.decoctingType == "2")
+                            //{
+                            //    writelog("处方分方", "_Recipe_list：" + listttojson(_Recipe_list));
+                            //    writelog("处方分方", "prescriptionDetailList：" + listttojson(item.prescriptionDetailList));
+                            //    writelog("处方分方", "生成煎药数据返回");
+                            //    int i = 0;
+                            //    foreach (var item_mx in item.prescriptionDetailList)
+                            //    {
+                            //        i++;
+                            //        DataRow[] dtr_XMMX = dt_item.Select("order_id = '" + item_mx.orderId + " '");
+                            //        if (dtr_XMMX != null && dtr_XMMX.Length > 0)
+                            //        {
+                            //            DataTable dataTable = new DataTable();
+                            //            dataTable.Rows.Add(dtr_XMMX);
+                            //            writelog("处方分方", "dtr_XMMX:" + DataTableToJsonWithJsonNet(dataTable));
+                            //            OutSurcharge outSurcharge = new OutSurcharge();
+                            //            outSurcharge.orderId = dtr_XMMX[0]["order_id"].ToString();
+                            //            outSurcharge.orderName = dtr_XMMX[0]["order_Name"].ToString();
+                            //            outSurcharge.orderType = dtr_XMMX[0]["order_Type"].ToString();
+                            //            outSurcharge.price = decimal.Parse(dtr_XMMX[0]["price"].ToString());
+                            //            outSurcharge.unit = dtr_XMMX[0]["order_unit"].ToString();
+                            //            outSurcharge.num = 1;
+                            //            outSurcharge.execDeptId = item.execDeptId;
+                            //            outSurcharge.execDeptName = item.execDeptName;
+                            //            outSurcharge.relateId = guid_JY.ToString();
+                            //            outSurcharge.money = decimal.Parse(dtr_XMMX[0]["price"].ToString());
+                            //            outSurcharge.complexFlag = "0";
+                            //            outSurcharge.additionalType = "3";
+                            //            OutSurcharge_list_result.Add(outSurcharge);
+                            //            writelog("处方分方", "煎药数据集合：" + listttojson(OutSurcharge_list_result));
+                            //        }
+                            //    }
+                            //    writelog("处方分方", "生成煎药数据返回完成");
+                            //    result_DoctorPrescription_list.OutSurcharge = OutSurcharge_list_result;
+                            //}
+                        }
+                    }
+                }
+                #endregion
+                writelog("处方分方", "添加数据到返回集合内");
+                writelog("处方分方", "返回的处方头" + listttojson(result_DoctorPrescription_list.Recipe));
+                foreach (var item in result_DoctorPrescription_list.Recipe)
+                {
+                    writelog("处方分方", "返回的处方明细" + listttojson(item.prescriptionDetailList));
+                }
+
+                //把分出的处方添加到返回数据集
+                RDPS.Add(result_DoctorPrescription_list);
+                rd.msg = "成功";
+                rd.flag = "0";
+                writelog("处方分方", "完成返回");
+            }
+            catch (Exception err)
+            {
+                writelog("处方分方", "处方分方异常：" + err);
+                rd.msg = err.Message;
+                rd.flag = "1";
+            }
+            writelog_DATE("处方分方", "结束进行处方分方");
+            DateTime dateEnd = DateTime.Now;
+            writelog_DATE("处方分方", "接口用时：" + ExecDateDiff(dateBegin, dateEnd));
+            return rd;
+        }
+
+ 
